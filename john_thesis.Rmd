@@ -1,0 +1,296 @@
+---
+title: "DATA698 Thesis - NYC Shootings Time Series Analysis"
+author: "John Mazon"
+date: "5/16/2022"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+rm(list = ls())
+
+library(tidyverse)
+#library(dplyr)
+#library(tidyr)
+library(forecast)
+library(fpp)
+library(fpp3)
+library(fpp2)
+# library(glue)
+# library(caret)
+# library(caTools)
+# library(pls)
+# library(Amelia)
+# library(RANN)
+library(lubridate)
+library(feasts)
+
+```
+
+## DATA 698 - Project Proposal
+
+
+## Overview and Motivation
+
+My DATA 698 Project will be based on NYC Crime. I was wondering how violent is the city, if some neighborhoods or type of persons are most affected, and if I could identify some patterns for shooting over time as well compare to other crimes. My primary goal is to take the tools and resources learned in the DATA SCIENCE MS courses such as time series, trend, seasonality, cyclical analysis as well as graphical visualizations to portray my findings. The Data sets found contain very useful information to perform such as analysis such as date of occurrence, type of offense, borough, age, race and gender. My hypothesis consists of identifying or try to pin point the specific zones/times more likely to have crime and analyze this deeply to come up with solutions correlating to the techniques used by other Crime Analysis experts in the literature chosen. The literature chosen such as "The crime numbers game: Management by manipulation" and "Understanding new York’s crime drop." may also be useful to identify any possible fallacy or errors in the data.
+
+A trend exists when there is a long-term increase or decrease in the data. It does not have to be linear. Sometimes we will refer to a trend as “changing direction,” when it might go from an increasing trend to a decreasing trend. A seasonal pattern occurs when a time series is affected by seasonal factors such as the time of the year or the day of the week. Seasonality is always of a fixed and known frequency. A cycle occurs when the data exhibit rises and falls that are not of a fixed frequency.
+
+
+
+## Exploration
+
+
+Exploratory Data Analysis refers to the critical process of performing initial investigations on data so as to discover patterns,to spot anomalies,to test hypothesis and to check assumptions with the help of summary statistics and graphical representations.
+
+It is a good practice to understand the data first and try to gather as many insights from it. EDA is all about making sense of data in hand,before getting them dirty with it.
+
+In addition, after exploring the data as mentioned above we could possibly be able to identify what day of the week certain crimes may be committed, is there a specific time of day when the crimes occurr and which boroughs may be the safest.
+
+The initial exploration for this Project began by me creating a shiny app[dashboard] in R to visualize the Open Source NYC Shooting Data. I created selection options for users to be able to view the data by year(2006-2020), select the type of incident[murder or non-murder shootings] and by borough. In addition to these options further information such as Total Number of Incidents, Percent Change vs. Previous Year and a Heatmap are provided.
+
+This is viewable here: https://johnmazon90.shinyapps.io/nyc_shooting_app_jmazon/
+
+![NYC SHOOTING SHINY APP - BY JMAZON](C:/Users/Pc/Desktop/data698shiny.PNG)
+
+
+
+## Data Source
+NYC OPEN DATA
+NYPD Complaint Data Historic
+
+This dataset includes all valid felony, misdemeanor, and violation crimes reported to the New York City Police Department (NYPD) from 2006 to the end of last year (2019). For additional details, please see the attached data dictionary in the ‘About’ section.
+
+List of every shooting incident that occurred in NYC going back to 2006 through the end of the previous calendar year. This is a breakdown of every shooting incident that occurred in NYC going back to 2006 through the end of the previous calendar year. This data is manually extracted every quarter and reviewed by the Office of Management Analysis and Planning before being posted on the NYPD website. Each record represents a shooting incident in NYC and includes information about the event, the location and time of occurrence. In addition, information related to suspect and victim demographics is also included. This data can be used by the public to explore the nature of shooting/criminal activity. Please refer to the attached data footnotes for additional information about this dataset.
+
+The NYPD maintains statistical data which is used as a management tool in reducing crime, improving procedures and training, and providing transparency to the public and government oversight agencies. In 1994, the department implemented CompStat, which through management, statistics, and accountability, successfully drove down crime to record levels not seen since the 1950s.
+
+The department provides up-to-date crime-related statistics in the seven major crime categories on the citywide, borough, and precinct levels, as well as historical crime data. The public can also access this data through the department's CompStat 2.0 portal.
+
+Tags: shooting, crime, law enforcement, public safety, nypd
+
+
+# DATA PREPARATION
+
+
+```{r}
+df_nycshooting_historic <- read.csv("https://raw.githubusercontent.com/johnm1990/DATA698/main/NYPD_Shooting_Incident_Data__Historic.csv")
+df_nycshoot_ytd <- read.csv("https://raw.githubusercontent.com/johnm1990/DATA698/main/NYPD_Shooting_Incident_Data__Year_To_Date_.csv")
+#df_nycshoot_ytd <- read.csv("https://raw.githubusercontent.com/johnm1990/DATA698/main/NYPD_Shooting_Incident_Data__Year_To_Date_.csv")
+
+head(df_nycshooting_historic)
+head(df_nycshoot_ytd)
+#head(df_nycshoot_ytd)
+```
+
+
+# DATA SUMMARIES
+
+
+
+```{r}
+summary(df_nycshoot_ytd)
+summary(df_nycshooting_historic)
+
+unique(df_nycshoot_ytd$BORO)
+
+```
+
+# DATA EXPLORATION
+
+
+```{r}
+colnames(df_nycshoot_ytd)[!colnames(df_nycshoot_ytd) %in% colnames(df_nycshooting_historic)]
+colnames(df_nycshooting_historic)
+colnames(df_nycshoot_ytd)
+df_nycshoot_ytd <- rename(df_nycshoot_ytd, Lon_Lat = New.Georeferenced.Column)
+
+
+df_merged <-  rbind(df_nycshooting_historic,df_nycshoot_ytd)
+head(df_merged)
+
+nrow(df_merged)
+nrow(df_nycshoot_ytd)
+nrow(df_nycshooting_historic)
+
+
+factor_columns <- c("BORO","PRECINCT","JURISDICTION_CODE","LOCATION_DESC","STATISTICAL_MURDER_FLAG",
+             "PERP_AGE_GROUP","PERP_AGE_GROUP","PERP_SEX", "PERP_RACE","VIC_AGE_GROUP","VIC_SEX","VIC_RACE")
+
+
+
+df_merged <- df_merged %>% 
+  mutate_at(factor_columns, factor)
+
+#convert to character
+df_merged <- df_merged %>% 
+  mutate(INCIDENT_KEY = as.character(INCIDENT_KEY))
+
+
+
+
+str(df_merged)
+summary(df_merged)
+```
+
+
+# TIME SERIES ANALYSIS : QUARTERLY
+
+
+```{r}
+
+df_merged$OCCUR_DATE <- mdy(df_merged$OCCUR_DATE)
+
+n_occur <- data.frame(table(df_merged$INCIDENT_KEY))
+head(n_occur[n_occur$Freq > 1,])
+df_merged_single <- df_merged[df_merged$INCIDENT_KEY %in% n_occur$Var1[n_occur$Freq == 1],]
+
+
+df_merged_single <- df_merged_single %>%
+  mutate(Quarter = yearquarter(OCCUR_DATE)) %>%
+  select(-OCCUR_DATE) %>%
+  as_tsibble(key = INCIDENT_KEY,
+             index = Quarter)
+
+
+names(df_merged_single)
+
+
+nycshooting_grouped <- df_merged_single %>%
+  index_by(Quarter) %>%
+  summarize(shootings = n())
+autoplot(nycshooting_grouped, shootings) +
+  labs(title = "NYC SHOOTING",
+       subtitle = "Quarter",
+       y = "Shootings")
+
+```
+
+
+#  SEASONALITY ANALYSIS BY BORO
+
+TIMES SERIES DECOMPOSITION 
+
+```{r}
+nycshooting_grouped %>%
+  gg_season(shootings, labels = "both") +
+  labs(y = " ",
+       title = "Seasonal plot: NYC SHOOTING")
+
+table(df_merged_single$BORO)
+```
+
+
+# STL DECOMPOSITION
+
+
+```{r}
+
+shootings_by_Boro <- df_merged_single %>%
+  group_by(BORO) %>%
+  summarise(shootings = n())
+shootings_by_Boro %>%
+  ggplot(aes(x = Quarter, y = shootings)) +
+  geom_line() +
+  facet_grid(vars(BORO), scales = "free_y") +
+  labs(title = "NYC Shooting by Boro",
+       y= "# of Shootings")
+
+
+#STL
+nycshooting_grouped %>%
+  model(
+    STL(shootings ~ trend(window = 7) +
+                   season(window = "periodic"),
+    robust = TRUE)) %>%
+  components() %>%
+  autoplot()
+
+
+#simple stats
+nycshooting_grouped %>%
+  features(shootings, list(mean = mean)) %>%
+  arrange(mean)
+
+
+#ACF
+nycshooting_grouped %>% features(shootings, feat_acf)
+
+
+#STL
+#used shootings by boro instead
+shootings_by_Boro%>%
+  features(shootings, feat_stl)
+
+
+
+
+```
+
+The feat_acf() function computes a selection of the autocorrelations discussed here. It will return six or seven features:
+
+# TIME SERIES FEATURES
+
+SEASONAL STRENGTH
+
+compare with other categorical
+```{r}
+#include in shiny app the other categorical v.
+
+boroandrace_shootings <- df_merged_single %>%
+  group_by(BORO,VIC_AGE_GROUP) %>%
+  summarise(shootings = n())
+
+
+
+
+boroandrace_shootings %>%
+  features(shootings, feat_stl) %>%
+  ggplot(aes(x = trend_strength, y = seasonal_strength_year,
+             col = VIC_AGE_GROUP)) +
+  geom_point() +
+  facet_wrap(vars(BORO))
+
+
+```
+
+
+# LAG PLOTS AND AUTOCORRELATION
+
+
+```{r}
+#lag plots
+lag_boroandrace_shootings <- shootings_by_Boro %>%
+  filter(BORO == 'BRONX')
+
+lag_boroandrace_shootings <- lag_boroandrace_shootings %>%
+  filter(year(Quarter) == 2020)
+
+lag_boroandrace_shootings %>%
+  gg_lag(shootings, geom = "point") +
+  labs(x = "lag(shootings, k)")
+
+
+#autocorrelation
+lag_boroandrace_shootings %>% ACF(shootings, lag_max = 9)
+
+
+# recent_production %>%
+ACF(shootings_by_Boro) %>%
+autoplot() + labs(title="NYC SHOOTINGS")
+
+
+#decomp
+dcmp <- lag_boroandrace_shootings %>%
+  model(stl = STL(shootings))
+components(dcmp)
+
+```
+
+
